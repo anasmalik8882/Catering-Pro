@@ -1,0 +1,1 @@
+Register a SECOND staging Android app with package com.example.catering_pro.staging; download its google-services.json into this directory. Do not copy the existing staging JSON for com.example.catering_pro here.

@@ -1,0 +1,20 @@
+{
+  "project": "demo-caterer-stage",
+  "businessId": "synthetic-caterer",
+  "mode": "apply",
+  "timezone": "Asia/Karachi",
+  "bookings": 4,
+  "payments": 2,
+  "capacityDays": {
+    "2026-10-29": 100,
+    "2026-10-30": 20
+  },
+  "paymentBalances": {
+    "b1": 0,
+    "b2": 0,
+    "historical": 400000,
+    "refundbook": 200000
+  },
+  "maxGuestsPerDay": 300,
+  "issues": []
+}

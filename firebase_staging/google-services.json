@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "641186826946",
+    "project_id": "caterer-pro-staging",
+    "storage_bucket": "caterer-pro-staging.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:641186826946:android:057ca913bb76855ea0895b",
+        "android_client_info": {
+          "package_name": "com.example.catering_pro"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBUe6ECJQAsiyc1eeYW5PNxf1oC7sACW3Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

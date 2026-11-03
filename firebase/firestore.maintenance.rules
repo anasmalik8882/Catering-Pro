@@ -1,0 +1,141 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function memberPath(bid, uid) { return /databases/$(database)/documents/businesses/$(bid)/members/$(uid); }
+    function isActiveMember(bid) {
+      return signedIn() && exists(memberPath(bid, request.auth.uid))
+        && get(memberPath(bid, request.auth.uid)).data.active == true;
+    }
+    function isOwner(bid) {
+      return isActiveMember(bid) &&
+        get(memberPath(bid, request.auth.uid)).data.role == 'owner';
+    }
+    function validBusiness() {
+      return request.resource.data.keys().hasOnly(['name','city','phone','ownerId','status','createdAt'])
+        && request.resource.data.name is string && request.resource.data.name.size() >= 3
+        && request.resource.data.name.size() <= 120
+        && request.resource.data.city is string && request.resource.data.city.size() > 0
+        && request.resource.data.city.size() <= 100
+        && request.resource.data.phone is string && request.resource.data.phone.size() >= 7
+        && request.resource.data.phone.size() <= 30
+        && request.resource.data.status == 'active'
+        && request.resource.data.ownerId == request.auth.uid;
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow create, update: if false;
+      allow delete: if false;
+    }
+
+    match /businesses/{businessId} {
+      allow create: if false;
+      allow read: if isActiveMember(businessId);
+      allow update: if false;
+      allow delete: if false;
+
+      match /members/{userId} {
+        allow read: if isActiveMember(businessId);
+        // Only self-provision the INITIAL owner membership while creating a business.
+        // All invitations, suspensions and role changes will later require trusted Functions.
+        allow create: if false;
+        allow update, delete: if false;
+      }
+
+      function canEditSales() {
+        return isActiveMember(businessId)
+          && get(memberPath(businessId, request.auth.uid)).data.role in ['owner','manager','sales'];
+      }
+      function shortText(value, length) { return value is string && value.size() <= length; }
+      function positivePaisa(value) { return value is int && value >= 0 && value <= 10000000000000; }
+      function createdByCurrent() { return request.resource.data.createdBy == request.auth.uid; }
+      function unchangedIdentity() { return request.resource.data.createdBy == resource.data.createdBy && request.resource.data.createdAt == resource.data.createdAt; }
+
+      match /customers/{cid} {
+        allow read: if isActiveMember(businessId);
+        allow create: if false;
+        allow update: if false;
+        allow delete: if false;
+      }
+      match /inquiries/{iid} {
+        allow read: if isActiveMember(businessId);
+        allow create: if false;
+        allow update: if false;
+        allow delete: if false;
+      }
+      match /menuItems/{mid} {
+        allow read: if isActiveMember(businessId);
+        allow create: if false;
+        allow update: if false;
+        allow delete: if false;
+      }
+      match /packages/{pid} {
+        allow read: if isActiveMember(businessId);
+        allow create: if false;
+        allow update, delete: if false;
+      }
+      match /quotations/{qid} {
+        allow read: if isActiveMember(businessId);
+        allow create: if false;
+        allow update: if false;
+        allow delete: if false;
+        match /revisions/{rid} {
+          allow read: if isActiveMember(businessId);
+          allow create: if false;
+          allow update, delete: if false;
+        }
+      }
+      // Phases 3/4: records are tenant-scoped and financial ledgers are append-only.
+      function canOperate() {
+        return isActiveMember(businessId)
+          && get(memberPath(businessId, request.auth.uid)).data.role in ['owner','manager','sales'];
+      }
+      function canManageFinance() {
+        return isActiveMember(businessId)
+          && get(memberPath(businessId, request.auth.uid)).data.role in ['owner','manager'];
+      }
+      match /bookings/{bookingId} {
+        allow read: if isActiveMember(businessId);
+        allow create: if false;
+        // All status changes are performed by the trusted callable function.
+        allow update: if false;
+        allow delete: if false;
+      }
+      match /payments/{pid} {
+        allow read: if isActiveMember(businessId);
+        // Only the Admin SDK in recordBookingPayment may create entries.
+        allow create: if false;
+        allow update, delete: if false;
+      }
+      // Managed only by trusted functions. Clients may view capacity.
+      match /capacityDays/{dateKey} {
+        allow read: if isActiveMember(businessId);
+        allow write: if false;
+      }
+      match /paymentBalances/{bookingId} {
+        allow read: if isActiveMember(businessId);
+        allow write: if false;
+      }
+      match /settings/{settingId} {
+        allow read: if isActiveMember(businessId);
+        allow write: if false;
+      }
+      match /expenses/{eid} {
+        allow read: if isActiveMember(businessId);
+        allow create: if false;
+        allow update, delete: if false;
+      }
+      match /eventTasks/{tid} {
+        allow read: if isActiveMember(businessId);
+        allow create: if false;
+        allow update: if false;
+        allow delete: if false;
+      }
+
+      // Future modules remain denied until reviewed.
+      match /{document=**} { allow read, write: if false; }
+    }
+    match /{document=**} { allow read, write: if false; }
+  }
+}

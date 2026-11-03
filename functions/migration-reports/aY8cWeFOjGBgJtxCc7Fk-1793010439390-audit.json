@@ -1,0 +1,20 @@
+{
+  "project": "caterer-pro-staging",
+  "businessId": "aY8cWeFOjGBgJtxCc7Fk",
+  "mode": "audit",
+  "timezone": "Asia/Karachi",
+  "bookings": 2,
+  "payments": 3,
+  "capacityDays": {
+    "2026-10-29": 100,
+    "2026-10-27": 100
+  },
+  "paymentBalances": {
+    "tUkqP001WaZ1J9yRMvaJ": 0,
+    "xG6gC4XtBXAz8vO9NedC": 200000
+  },
+  "maxGuestsPerDay": 500,
+  "issues": [
+    "Trusted counters or migration state already exist: manual reconciliation needed; refusing overwrite"
+  ]
+}

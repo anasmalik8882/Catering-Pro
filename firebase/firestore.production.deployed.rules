@@ -1,0 +1,260 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function memberPath(bid, uid) { return /databases/$(database)/documents/businesses/$(bid)/members/$(uid); }
+    function isActiveMember(bid) {
+      return signedIn() && exists(memberPath(bid, request.auth.uid))
+        && get(memberPath(bid, request.auth.uid)).data.active == true;
+    }
+    function isOwner(bid) {
+      return isActiveMember(bid) &&
+        get(memberPath(bid, request.auth.uid)).data.role == 'owner';
+    }
+    function validBusiness() {
+      return request.resource.data.keys().hasOnly(['name','city','phone','ownerId','status','createdAt'])
+        && request.resource.data.name is string && request.resource.data.name.size() >= 3
+        && request.resource.data.name.size() <= 120
+        && request.resource.data.city is string && request.resource.data.city.size() > 0
+        && request.resource.data.city.size() <= 100
+        && request.resource.data.phone is string && request.resource.data.phone.size() >= 7
+        && request.resource.data.phone.size() <= 30
+        && request.resource.data.status == 'active'
+        && request.resource.data.ownerId == request.auth.uid;
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow create, update: if signedIn() && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly(['activeBusinessId','updatedAt'])
+        && request.resource.data.activeBusinessId is string
+        && request.resource.data.activeBusinessId.size() > 0
+        && existsAfter(memberPath(request.resource.data.activeBusinessId, userId))
+        && getAfter(memberPath(request.resource.data.activeBusinessId, userId)).data.active == true;
+      allow delete: if false;
+    }
+
+    match /businesses/{businessId} {
+      allow create: if signedIn() && validBusiness()
+        && businessId == 'owner_' + request.auth.uid;
+      allow read: if isActiveMember(businessId);
+      allow update: if isOwner(businessId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name','city','phone'])
+        && request.resource.data.name is string && request.resource.data.name.size() >= 3
+        && request.resource.data.city is string && request.resource.data.city.size() > 0
+        && request.resource.data.phone is string && request.resource.data.phone.size() >= 7;
+      allow delete: if false;
+
+      match /members/{userId} {
+        allow read: if isActiveMember(businessId);
+        // Only self-provision the INITIAL owner membership while creating a business.
+        // All invitations, suspensions and role changes will later require trusted Functions.
+        allow create: if signedIn() && request.auth.uid == userId
+          && request.resource.data.keys().hasOnly(['uid','role','active','joinedAt'])
+          && request.resource.data.uid == userId
+          && request.resource.data.role == 'owner'
+          && request.resource.data.active == true
+          && !exists(/databases/$(database)/documents/businesses/$(businessId))
+          && getAfter(/databases/$(database)/documents/businesses/$(businessId)).data.ownerId == userId;
+        allow update, delete: if false;
+      }
+
+      function canEditSales() {
+        return isActiveMember(businessId)
+          && get(memberPath(businessId, request.auth.uid)).data.role in ['owner','manager','sales'];
+      }
+      function shortText(value, length) { return value is string && value.size() <= length; }
+      function positivePaisa(value) { return value is int && value >= 0 && value <= 10000000000000; }
+      function createdByCurrent() { return request.resource.data.createdBy == request.auth.uid; }
+      function unchangedIdentity() { return request.resource.data.createdBy == resource.data.createdBy && request.resource.data.createdAt == resource.data.createdAt; }
+
+      match /customers/{cid} {
+        allow read: if isActiveMember(businessId);
+        allow create: if canEditSales() && createdByCurrent()
+          && request.resource.data.keys().hasOnly(['name','phone','email','notes','createdBy','createdAt','updatedAt'])
+          && shortText(request.resource.data.name,120) && request.resource.data.name.size() >= 2
+          && shortText(request.resource.data.phone,30) && request.resource.data.phone.size() >= 7
+          && shortText(request.resource.data.email,160) && shortText(request.resource.data.notes,2000)
+          && request.resource.data.createdAt == request.time;
+        allow update: if canEditSales() && unchangedIdentity()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name','phone','email','notes','updatedAt'])
+          && shortText(request.resource.data.name,120) && request.resource.data.name.size() >= 2
+          && shortText(request.resource.data.phone,30) && request.resource.data.phone.size() >= 7
+          && shortText(request.resource.data.email,160) && shortText(request.resource.data.notes,2000);
+        allow delete: if false;
+      }
+      match /inquiries/{iid} {
+        allow read: if isActiveMember(businessId);
+        allow create: if canEditSales() && createdByCurrent()
+          && request.resource.data.keys().hasOnly(['customerId','eventType','guests','eventDate','source','notes','status','followUpAt','createdBy','createdAt','updatedAt'])
+          && exists(/databases/$(database)/documents/businesses/$(businessId)/customers/$(request.resource.data.customerId))
+          && request.resource.data.guests is int && request.resource.data.guests > 0 && request.resource.data.guests <= 100000
+          && shortText(request.resource.data.eventType,60) && shortText(request.resource.data.source,50)
+          && shortText(request.resource.data.notes,2000) && request.resource.data.status == 'new'
+          && request.resource.data.eventDate is timestamp && request.resource.data.createdAt == request.time;
+        allow update: if canEditSales() && unchangedIdentity()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','followUpAt','updatedAt'])
+          && request.resource.data.status in ['new','contacted','quoted','won','lost']
+          && (request.resource.data.followUpAt == null || request.resource.data.followUpAt is timestamp);
+        allow delete: if false;
+      }
+      match /menuItems/{mid} {
+        allow read: if isActiveMember(businessId);
+        allow create: if canEditSales() && createdByCurrent()
+          && request.resource.data.keys().hasOnly(['name','type','pricePaisa','unit','description','active','createdBy','createdAt','updatedAt'])
+          && shortText(request.resource.data.name,120) && request.resource.data.name.size() >= 2
+          && shortText(request.resource.data.description,2000)
+          && shortText(request.resource.data.type,50) && shortText(request.resource.data.unit,40)
+          && positivePaisa(request.resource.data.pricePaisa)
+          && request.resource.data.active == true && request.resource.data.createdAt == request.time;
+        allow update: if canEditSales() && unchangedIdentity()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name','type','pricePaisa','unit','description','active','updatedAt'])
+          && shortText(request.resource.data.name,120) && request.resource.data.name.size() >= 2
+          && shortText(request.resource.data.description,2000)
+          && shortText(request.resource.data.type,50) && shortText(request.resource.data.unit,40)
+          && positivePaisa(request.resource.data.pricePaisa) && request.resource.data.active is bool;
+        allow delete: if false;
+      }
+      match /packages/{pid} {
+        allow read: if isActiveMember(businessId);
+        allow create: if canEditSales() && createdByCurrent()
+          && request.resource.data.keys().hasOnly(['name','pricingMode','pricePaisa','minimumGuests','description','active','createdBy','createdAt','updatedAt'])
+          && shortText(request.resource.data.name,120) && request.resource.data.name.size() >= 2
+          && request.resource.data.pricingMode in ['per head','per daig','fixed']
+          && positivePaisa(request.resource.data.pricePaisa)
+          && request.resource.data.minimumGuests is int && request.resource.data.minimumGuests > 0
+          && shortText(request.resource.data.description,2000) && request.resource.data.active == true
+          && request.resource.data.createdAt == request.time;
+        allow update, delete: if false;
+      }
+      match /quotations/{qid} {
+        allow read: if isActiveMember(businessId);
+        allow create: if canEditSales() && createdByCurrent()
+          && request.resource.data.keys().hasOnly(['customerId','inquiryId','eventType','guests','eventDate','validUntil','status','revision','totalPaisa','createdBy','createdAt','updatedAt'])
+          && exists(/databases/$(database)/documents/businesses/$(businessId)/customers/$(request.resource.data.customerId))
+          && request.resource.data.revision == 1 && request.resource.data.status == 'draft'
+          && request.resource.data.guests is int && request.resource.data.guests > 0
+          && request.resource.data.eventDate is timestamp
+          && (request.resource.data.validUntil == null || request.resource.data.validUntil is timestamp)
+          && shortText(request.resource.data.eventType,60)
+          && request.resource.data.inquiryId is string
+          && positivePaisa(request.resource.data.totalPaisa)
+          && request.resource.data.createdAt == request.time
+          && existsAfter(/databases/$(database)/documents/businesses/$(businessId)/quotations/$(qid)/revisions/1)
+          && getAfter(/databases/$(database)/documents/businesses/$(businessId)/quotations/$(qid)/revisions/1).data.totalPaisa == request.resource.data.totalPaisa;
+        allow update: if canEditSales() && unchangedIdentity()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','revision','totalPaisa','updatedAt'])
+          && (
+            (request.resource.data.revision == resource.data.revision
+              && request.resource.data.totalPaisa == resource.data.totalPaisa
+              && ((resource.data.status == 'draft' && request.resource.data.status in ['sent','declined'])
+                || (resource.data.status == 'sent' && request.resource.data.status in ['accepted','declined'])))
+            || (resource.data.status in ['draft','sent'] && request.resource.data.status == 'draft'
+              && request.resource.data.revision == resource.data.revision + 1
+              && positivePaisa(request.resource.data.totalPaisa)
+              && existsAfter(/databases/$(database)/documents/businesses/$(businessId)/quotations/$(qid)/revisions/$(request.resource.data.revision))
+              && getAfter(/databases/$(database)/documents/businesses/$(businessId)/quotations/$(qid)/revisions/$(request.resource.data.revision)).data.totalPaisa == request.resource.data.totalPaisa)
+          );
+        allow delete: if false;
+        match /revisions/{rid} {
+          allow read: if isActiveMember(businessId);
+          allow create: if canEditSales()
+            && request.resource.data.keys().hasOnly(['revision','lines','subtotalPaisa','extraPaisa','discountPaisa','totalPaisa','notes','createdAt'])
+            && request.resource.data.revision is int && rid == string(request.resource.data.revision)
+            && request.resource.data.lines is list && request.resource.data.lines.size() > 0 && request.resource.data.lines.size() <= 100
+            && positivePaisa(request.resource.data.subtotalPaisa)
+            && positivePaisa(request.resource.data.extraPaisa)
+            && positivePaisa(request.resource.data.discountPaisa)
+            && positivePaisa(request.resource.data.totalPaisa)
+            && request.resource.data.totalPaisa == request.resource.data.subtotalPaisa + request.resource.data.extraPaisa - request.resource.data.discountPaisa
+            && shortText(request.resource.data.notes,3000)
+            && request.resource.data.createdAt == request.time
+            && getAfter(/databases/$(database)/documents/businesses/$(businessId)/quotations/$(qid)).data.revision == request.resource.data.revision
+            && getAfter(/databases/$(database)/documents/businesses/$(businessId)/quotations/$(qid)).data.totalPaisa == request.resource.data.totalPaisa;
+          allow update, delete: if false;
+        }
+      }
+      // Phases 3/4: records are tenant-scoped and financial ledgers are append-only.
+      function canOperate() {
+        return isActiveMember(businessId)
+          && get(memberPath(businessId, request.auth.uid)).data.role in ['owner','manager','sales'];
+      }
+      function canManageFinance() {
+        return isActiveMember(businessId)
+          && get(memberPath(businessId, request.auth.uid)).data.role in ['owner','manager'];
+      }
+      match /bookings/{bookingId} {
+        allow read: if isActiveMember(businessId);
+        allow create: if canOperate()
+          && request.resource.data.keys().hasOnly(['quotationId','quotationRevision','customerId','eventType','eventDate','guests','totalPaisa','status','createdBy','createdAt','updatedAt'])
+          && bookingId == request.resource.data.quotationId
+          && createdByCurrent() && request.resource.data.createdAt == request.time
+          && request.resource.data.status == 'tentative'
+          && exists(/databases/$(database)/documents/businesses/$(businessId)/quotations/$(bookingId))
+          && get(/databases/$(database)/documents/businesses/$(businessId)/quotations/$(bookingId)).data.status == 'accepted'
+          && request.resource.data.customerId == get(/databases/$(database)/documents/businesses/$(businessId)/quotations/$(bookingId)).data.customerId
+          && request.resource.data.totalPaisa == get(/databases/$(database)/documents/businesses/$(businessId)/quotations/$(bookingId)).data.totalPaisa
+          && request.resource.data.quotationRevision == get(/databases/$(database)/documents/businesses/$(businessId)/quotations/$(bookingId)).data.revision
+          && request.resource.data.guests == get(/databases/$(database)/documents/businesses/$(businessId)/quotations/$(bookingId)).data.guests
+          && request.resource.data.eventType == get(/databases/$(database)/documents/businesses/$(businessId)/quotations/$(bookingId)).data.eventType
+          && request.resource.data.eventDate == get(/databases/$(database)/documents/businesses/$(businessId)/quotations/$(bookingId)).data.eventDate;
+        allow update: if canOperate() && unchangedIdentity()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','updatedAt'])
+          && (
+            (resource.data.status == 'tentative' && request.resource.data.status in ['confirmed','cancelled'])
+            || (resource.data.status == 'confirmed' && request.resource.data.status in ['preparation','cancelled'])
+            || (resource.data.status == 'preparation' && request.resource.data.status in ['ready','cancelled'])
+            || (resource.data.status == 'ready' && request.resource.data.status in ['in_progress','cancelled'])
+            || (resource.data.status == 'in_progress' && request.resource.data.status == 'completed')
+            || (resource.data.status == 'completed' && request.resource.data.status == 'closed')
+          );
+        allow delete: if false;
+      }
+      match /payments/{pid} {
+        allow read: if isActiveMember(businessId);
+        allow create: if canManageFinance() && createdByCurrent()
+          && request.resource.data.keys().hasOnly(['bookingId','amountPaisa','kind','method','reference','createdBy','createdAt'])
+          && exists(/databases/$(database)/documents/businesses/$(businessId)/bookings/$(request.resource.data.bookingId))
+          && request.resource.data.amountPaisa is int && request.resource.data.amountPaisa > 0
+          && request.resource.data.amountPaisa <= 10000000000000
+          && request.resource.data.kind in ['payment','refund']
+          && shortText(request.resource.data.method,60)
+          && shortText(request.resource.data.reference,300)
+          && request.resource.data.createdAt == request.time;
+        allow update, delete: if false;
+      }
+      match /expenses/{eid} {
+        allow read: if isActiveMember(businessId);
+        allow create: if canManageFinance() && createdByCurrent()
+          && request.resource.data.keys().hasOnly(['bookingId','category','amountPaisa','description','createdBy','createdAt'])
+          && exists(/databases/$(database)/documents/businesses/$(businessId)/bookings/$(request.resource.data.bookingId))
+          && request.resource.data.amountPaisa is int && request.resource.data.amountPaisa > 0
+          && request.resource.data.amountPaisa <= 10000000000000
+          && shortText(request.resource.data.category,80)
+          && shortText(request.resource.data.description,2000)
+          && request.resource.data.createdAt == request.time;
+        allow update, delete: if false;
+      }
+      match /eventTasks/{tid} {
+        allow read: if isActiveMember(businessId);
+        allow create: if canOperate() && createdByCurrent()
+          && request.resource.data.keys().hasOnly(['bookingId','title','category','dueAt','assignee','completed','createdBy','createdAt','updatedAt'])
+          && exists(/databases/$(database)/documents/businesses/$(businessId)/bookings/$(request.resource.data.bookingId))
+          && shortText(request.resource.data.title,200) && request.resource.data.title.size() > 0
+          && request.resource.data.category in ['kitchen','staff','transport','equipment','delivery']
+          && request.resource.data.dueAt is timestamp
+          && shortText(request.resource.data.assignee,150)
+          && request.resource.data.completed == false
+          && request.resource.data.createdAt == request.time;
+        allow update: if canOperate() && unchangedIdentity()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['completed','updatedAt'])
+          && request.resource.data.completed is bool;
+        allow delete: if false;
+      }
+
+      // Future modules remain denied until reviewed.
+      match /{document=**} { allow read, write: if false; }
+    }
+    match /{document=**} { allow read, write: if false; }
+  }
+}

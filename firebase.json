@@ -1,0 +1,40 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "catering-pro-b001d",
+          "appId": "1:541019459394:android:0e9f50438ecffff0ec42db",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "catering-pro-b001d",
+          "configurations": {
+            "android": "1:541019459394:android:0e9f50438ecffff0ec42db",
+            "ios": "1:541019459394:ios:c2aabdb481dc77bcec42db",
+            "web": "1:541019459394:web:006de4d4692a2113ec42db"
+          }
+        }
+      }
+    }
+  },
+  "firestore": {
+    "rules": "firebase/firestore.rules",
+    "indexes": "firebase/firestore.indexes.json"
+  },
+  "emulators": {
+    "firestore": {
+      "host": "127.0.0.1",
+      "port": 8080
+    },
+    "ui": {
+      "enabled": false
+    }
+  },
+  "functions": {
+    "source": "functions",
+    "runtime": "nodejs22"
+  }
+}

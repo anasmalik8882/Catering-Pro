@@ -1,0 +1,20 @@
+import 'package:flutter_test/flutter_test.dart';
+// Change `YOUR_PROJECT_PACKAGE_NAME` to the name: value in your pubspec.yaml.
+import 'package:YOUR_PROJECT_PACKAGE_NAME/features/business/domain/business.dart';
+
+void main() {
+  test('roles decode to the expected wire values', () {
+    expect(BusinessRoleLabel.fromWire('kitchen_staff'), BusinessRole.kitchenStaff);
+    expect(BusinessRole.owner.wireValue, 'owner');
+    expect(BusinessRole.manager.wireValue, 'manager');
+  });
+  test('finance and team permissions differ by role', () {
+    BusinessMembership member(BusinessRole role) => BusinessMembership(
+      uid: 'user', businessId: 'business', role: role, active: true,
+    );
+    expect(member(BusinessRole.owner).canManageTeam, isTrue);
+    expect(member(BusinessRole.manager).canViewFinance, isTrue);
+    expect(member(BusinessRole.sales).canViewFinance, isFalse);
+    expect(member(BusinessRole.eventStaff).canManageTeam, isFalse);
+  });
+}
