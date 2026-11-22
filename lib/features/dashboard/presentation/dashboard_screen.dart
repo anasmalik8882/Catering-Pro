@@ -4,6 +4,7 @@ import '../../../core/app/session_controller.dart';
 import '../../business/domain/business.dart';
 import '../../sales/presentation/sales_screens.dart';
 import '../../operations/presentation/operations_screens.dart';
+import '../../storefront/storefront_management.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -44,6 +45,18 @@ class DashboardScreen extends StatelessWidget {
               '${session.business.value?.city ?? ''}  •  ${session.membership.value?.role.displayName ?? ''}',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
+            if (session.membership.value?.canManageTeam == true)
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.storefront_outlined),
+                  title: const Text('Customer storefront'),
+                  subtitle: const Text(
+                    'Brand, preview and publish your public website',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Get.to(() => const StorefrontManagementPage()),
+                ),
+              ),
             const SizedBox(height: 22),
             const Wrap(
               spacing: 12,

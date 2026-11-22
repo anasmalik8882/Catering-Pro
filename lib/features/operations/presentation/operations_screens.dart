@@ -114,16 +114,22 @@ class _BookingsPageState extends State<BookingsPage> {
                         );
                         if (value == null) return;
                         final maximum = int.tryParse(value);
-                        if (maximum == null || maximum < 1 || maximum > 100000) {
-                          Get.snackbar('Invalid capacity',
-                              'Enter a number between 1 and 100000');
+                        if (maximum == null ||
+                            maximum < 1 ||
+                            maximum > 100000) {
+                          Get.snackbar(
+                            'Invalid capacity',
+                            'Enter a number between 1 and 100000',
+                          );
                           return;
                         }
                         if (current == maximum) return;
                         final repository = operations();
-                        await safely(() => current is int
-                            ? repository.updateDailyCapacity(maximum)
-                            : repository.initializeDailyCapacity(maximum));
+                        await safely(
+                          () => current is int
+                              ? repository.updateDailyCapacity(maximum)
+                              : repository.initializeDailyCapacity(maximum),
+                        );
                       },
               );
             },

@@ -18,21 +18,35 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="description" content="Explore catering menus and packages, and request a quotation for your next occasion.">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="catering_pro">
-  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <meta name="apple-mobile-web-app-title" content="Caterer Pro">
+
 
   <!-- Favicon -->
-  <link rel="icon" type="image/png" href="favicon.png"/>
+  <link rel="icon" type="image/svg+xml" href="customer_icon.svg"/>
 
-  <title>catering_pro</title>
+  <title>Caterer Pro | Memorable occasions</title>
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
+  <div id="customer-boot" role="status" aria-live="polite" style="position:fixed;inset:0;display:grid;place-content:center;justify-items:center;padding:24px;background:#faf8f2;color:#285448;font:16px/1.6 Arial,sans-serif;text-align:center">
+    <img src="customer_icon.svg" width="56" height="56" alt="">
+    <p id="customer-boot-message">Preparing your catering experience?</p>
+    <noscript>Enable JavaScript to view menus and request a quotation.</noscript>
+  </div>
+  <script>
+    window.addEventListener('flutter-first-frame', function () {
+      document.getElementById('customer-boot')?.remove();
+    });
+    setTimeout(function () {
+      var message = document.getElementById('customer-boot-message');
+      if (message) message.textContent = 'Taking longer than expected. Check your connection and refresh this page.';
+    }, 20000);
+  </script>
   <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader

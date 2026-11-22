@@ -138,7 +138,8 @@ bool isDefinitivePaymentRejection(String code, String? message) {
   final normalizedCode = code.toLowerCase().replaceAll('_', '-');
   final detail = message ?? '';
   if (normalizedCode == 'failed-precondition') {
-    return detail == 'Payment exceeds balance or refund exceeds net collections.' ||
+    return detail ==
+            'Payment exceeds balance or refund exceeds net collections.' ||
         detail == 'Cancelled booking: manual reconciliation required.' ||
         detail == 'Invalid contract total.' ||
         detail == 'Payment balance inconsistent; reconcile before continuing.';

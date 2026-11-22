@@ -103,3 +103,22 @@ test('accepted quote converts to one immutable-priced tentative booking', async 
   await assertFails(bob.db.doc(ref.path).get());
   await assertFails(bob.db.doc(ref.path).update({status:'cancelled'}));
 });
+
+test('public storefront internals and intake remain inaccessible to anonymous clients', async () => {
+  const alice = await provisionOwner('website-owner');
+  const anon = env.unauthenticatedContext().firestore();
+  await env.withSecurityRulesDisabled(async ctx => {
+    const db = ctx.firestore();
+    await db.doc('publicStorefronts/example-caterer').set({businessId:alice.bizId, publicData:{published:true}});
+    await db.doc(`businesses/${alice.bizId}/publicInquiries/example`).set({name:'Visitor',status:'new'});
+  });
+  for (const path of ['publicStorefronts/example-caterer', 'storefrontRateLimits/example', `businesses/${alice.bizId}`, ...['customers','quotations','bookings','payments','capacityDays','members','publicInquiries','settings'].map(c => `businesses/${alice.bizId}/${c}/example`)]) {
+    await assertFails(anon.doc(path).get());
+    await assertFails(anon.doc(path).set({malicious:true}));
+  }
+  await assertSucceeds(alice.db.doc(`businesses/${alice.bizId}/publicInquiries/example`).get());
+  await assertFails(alice.db.doc(`businesses/${alice.bizId}/publicInquiries/example`).update({status:'confirmed'}));
+  await assertFails(alice.db.doc('publicStorefronts/example-caterer').set({publicData:{published:true}}));
+  const other = await provisionOwner('website-other');
+  await assertFails(other.db.doc(`businesses/${alice.bizId}/publicInquiries/example`).get());
+});

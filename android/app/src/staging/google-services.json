@@ -12,7 +12,12 @@
           "package_name": "com.example.catering_pro"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "641186826946-b1mfeftlaoreid039sunremku73uf6bl.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBUe6ECJQAsiyc1eeYW5PNxf1oC7sACW3Q"
@@ -20,7 +25,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "641186826946-b1mfeftlaoreid039sunremku73uf6bl.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     },
@@ -31,7 +41,20 @@
           "package_name": "com.example.catering_pro.staging"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "641186826946-uofthag8jr0lpau954bplbpttnlvs1o0.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.catering_pro.staging",
+            "certificate_hash": "2bb89d6ce6cdfb238933b6c0bf1f61773cfeb30d"
+          }
+        },
+        {
+          "client_id": "641186826946-b1mfeftlaoreid039sunremku73uf6bl.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBUe6ECJQAsiyc1eeYW5PNxf1oC7sACW3Q"
@@ -39,7 +62,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "641186826946-b1mfeftlaoreid039sunremku73uf6bl.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

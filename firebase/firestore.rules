@@ -83,6 +83,11 @@ service cloud.firestore {
           && shortText(request.resource.data.email,160) && shortText(request.resource.data.notes,2000);
         allow delete: if false;
       }
+      // Anonymous intake is written only by the trusted callable.
+      match /publicInquiries/{iid} {
+        allow read: if isOwner(businessId);
+        allow write: if false;
+      }
       match /inquiries/{iid} {
         allow read: if isActiveMember(businessId);
         allow create: if canEditSales() && createdByCurrent()
