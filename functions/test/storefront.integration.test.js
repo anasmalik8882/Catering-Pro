@@ -111,3 +111,70 @@ test('existing trusted booking, payment and capacity endpoints work with new emu
   assert.equal((await invoke('transitionBooking',{businessId,bookingId:'new-booking',status:'cancelled'},account.token)).result?.status,'cancelled');
   assert.equal((await base.collection('capacityDays').doc('2027-03-01').get()).get('reservedGuests'),0);
 });
+
+test('website inquiries convert into a tenant customer and sales inquiry (Milestone 11)', {timeout:240000}, async () => {
+  assert.equal(process.env.GCLOUD_PROJECT, PROJECT);
+  assert.equal(process.env.FIRESTORE_EMULATOR_HOST, '127.0.0.1:8080');
+  if (!getApps().length) initializeApp({projectId:PROJECT});
+  const db = getFirestore();
+  const owner = await user('pipeline-owner@example.invalid');
+  const seller = await user('pipeline-sales@example.invalid');
+  const cook = await user('pipeline-kitchen@example.invalid');
+  const outsider = await user('pipeline-outsider@example.invalid');
+  const businessId = 'pipeline-biz';
+  const base = db.collection('businesses').doc(businessId);
+  await base.set({name:'Pipeline Caterer', status:'active', ownerId:owner.uid});
+  await base.collection('members').doc(owner.uid).set({role:'owner', active:true});
+  await base.collection('members').doc(seller.uid).set({role:'sales', active:true});
+  await base.collection('members').doc(cook.uid).set({role:'kitchen_staff', active:true});
+  await base.collection('packages').doc('feast').set({name:'Wedding feast', active:true, pricePaisa:150000, pricingMode:'per head', minimumGuests:50});
+  const inquiry = (name, phone) => ({name, phone, email:'visitor@example.invalid', eventType:'Walima', eventDate:'2027-04-10', guests:250,
+    packageId:'feast', requirements:'Live BBQ station', businessId, slug:'pipeline', contentHash:'x', status:'new', source:'public_storefront', createdAt:new Date()});
+  await base.collection('publicInquiries').doc('pub-1').set(inquiry('Ayesha Khan', '03001112222'));
+  await base.collection('publicInquiries').doc('pub-2').set(inquiry('Bilal Ahmed', '03009998888'));
+  await base.collection('customers').doc('existing').set({name:'Bilal Ahmed', phone:'03009998888', email:'', notes:'', createdBy:owner.uid, createdAt:new Date(), updatedAt:new Date()});
+  const review = (account, data) => invoke('reviewPublicInquiry', {businessId, ...data}, account?.token);
+
+  assert.equal((await review(null, {inquiryId:'pub-1', action:'contacted'})).error.status, 'UNAUTHENTICATED');
+  assert.equal((await review(cook, {inquiryId:'pub-1', action:'contacted'})).error.status, 'PERMISSION_DENIED');
+  assert.equal((await review(outsider, {inquiryId:'pub-1', action:'contacted'})).error.status, 'PERMISSION_DENIED');
+  assert.equal((await review(seller, {inquiryId:'missing', action:'contacted'})).error.status, 'NOT_FOUND');
+  assert.equal((await review(seller, {inquiryId:'pub-1', action:'reopen'})).error.status, 'FAILED_PRECONDITION');
+  assert.equal((await review(seller, {inquiryId:'pub-1', action:'contacted'})).result.status, 'contacted');
+
+  // Concurrent conversions of the same inquiry yield one customer + one sales inquiry.
+  const [a, b] = await Promise.all([review(seller, {inquiryId:'pub-1', action:'convert'}), review(seller, {inquiryId:'pub-1', action:'convert'})]);
+  assert.ok(a.result && b.result, JSON.stringify([a, b]));
+  assert.equal(a.result.salesInquiryId, b.result.salesInquiryId);
+  assert.equal(a.result.customerId, b.result.customerId);
+  const customer = await base.collection('customers').doc(a.result.customerId).get();
+  assert.equal(customer.get('name'), 'Ayesha Khan');
+  assert.equal(customer.get('createdBy'), seller.uid);
+  const salesInquiry = await base.collection('inquiries').doc(a.result.salesInquiryId).get();
+  assert.equal(salesInquiry.get('source'), 'Website');
+  assert.equal(salesInquiry.get('status'), 'new');
+  assert.equal(salesInquiry.get('guests'), 250);
+  assert.equal(salesInquiry.get('customerId'), customer.id);
+  assert.ok(salesInquiry.get('notes').includes('Wedding feast'));
+  assert.ok(salesInquiry.get('notes').includes('Live BBQ station'));
+  const converted = await base.collection('publicInquiries').doc('pub-1').get();
+  assert.equal(converted.get('status'), 'converted');
+  assert.equal(converted.get('handledBy'), seller.uid);
+  assert.equal((await review(seller, {inquiryId:'pub-1', action:'dismiss'})).error.status, 'FAILED_PRECONDITION');
+
+  // Matching phone reuses the existing customer instead of duplicating.
+  const reuse = await review(owner, {inquiryId:'pub-2', action:'convert'});
+  assert.equal(reuse.result.customerId, 'existing', JSON.stringify(reuse));
+  assert.equal(reuse.result.customerCreated, false);
+  assert.equal((await base.collection('customers').get()).size, 2);
+
+  // Dismiss / reopen cycle, and cross-tenant customer ids are rejected.
+  await base.collection('publicInquiries').doc('pub-3').set(inquiry('Spam Bot', '03000000000'));
+  assert.equal((await review(seller, {inquiryId:'pub-3', action:'dismiss', reason:'spam'})).result.status, 'dismissed');
+  assert.equal((await base.collection('publicInquiries').doc('pub-3').get()).get('dismissReason'), 'spam');
+  assert.equal((await review(seller, {inquiryId:'pub-3', action:'reopen'})).result.status, 'new');
+  assert.equal((await review(seller, {inquiryId:'pub-3', action:'convert', customerId:'not-here'})).error.status, 'NOT_FOUND');
+
+  // No booking, quotation, payment or capacity state was touched.
+  for (const c of ['bookings', 'quotations', 'payments', 'capacityDays']) assert.equal((await base.collection(c).get()).size, 0, c);
+});

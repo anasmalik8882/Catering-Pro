@@ -6,6 +6,7 @@ import '../data/sales_repository.dart';
 import '../domain/sales_models.dart';
 import 'package:intl/intl.dart';
 import 'quotation_export.dart';
+import '../../inquiries/website_inquiries.dart';
 import 'package:get/get.dart';
 
 SalesRepository sales() {
@@ -73,6 +74,12 @@ class SalesHome extends StatelessWidget {
             'Customers',
             'Customer directory and history',
             const CustomersPage(),
+          ),
+          (
+            Icons.language,
+            'Website inquiries',
+            'Requests from your public storefront',
+            const WebsiteInquiriesPage(),
           ),
           (
             Icons.forum_outlined,
@@ -563,6 +570,14 @@ void inquiryDetails(BuildContext context, SalesRecord r) {
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Close'),
           ),
+          if (salesEditor() && !['won', 'lost'].contains(r.str('status')))
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                Get.to(() => QuoteEditor(prefill: QuotePrefill.fromInquiry(r)));
+              },
+              child: const Text('Create quotation'),
+            ),
           if (salesEditor())
             FilledButton(
               onPressed: () async {
@@ -896,9 +911,51 @@ class QuotationsPage extends StatelessWidget {
   );
 }
 
+const quoteEventTypes = [
+  'Wedding',
+  'Mehndi',
+  'Baraat',
+  'Walima',
+  'Birthday',
+  'Corporate',
+  'Daig / bulk',
+  'Other',
+];
+
+/// Event type options that always include [current], so a free-text type
+/// from a website inquiry can be shown without breaking the dropdown.
+List<String> eventTypeOptions(String current) =>
+    quoteEventTypes.contains(current) || current.trim().isEmpty
+    ? quoteEventTypes
+    : [current, ...quoteEventTypes];
+
+/// Values carried from a sales inquiry into a new quotation (Milestone 11).
+class QuotePrefill {
+  final String customerId;
+  final String inquiryId;
+  final String eventType;
+  final int guests;
+  final DateTime? eventDate;
+  const QuotePrefill({
+    required this.customerId,
+    required this.inquiryId,
+    required this.eventType,
+    required this.guests,
+    this.eventDate,
+  });
+  factory QuotePrefill.fromInquiry(SalesRecord inquiry) => QuotePrefill(
+    customerId: inquiry.str('customerId'),
+    inquiryId: inquiry.id,
+    eventType: inquiry.str('eventType'),
+    guests: inquiry.number('guests'),
+    eventDate: inquiry.date('eventDate'),
+  );
+}
+
 class QuoteEditor extends StatefulWidget {
   final SalesRecord? existing;
-  const QuoteEditor({super.key, this.existing});
+  final QuotePrefill? prefill;
+  const QuoteEditor({super.key, this.existing, this.prefill});
   @override
   State<QuoteEditor> createState() => _QuoteEditorState();
 }
@@ -920,6 +977,12 @@ class _QuoteEditorState extends State<QuoteEditor> {
   @override
   void initState() {
     super.initState();
+    final prefill = widget.prefill;
+    if (widget.existing == null && prefill != null) {
+      if (prefill.eventType.trim().isNotEmpty) eventType = prefill.eventType;
+      if (prefill.guests > 0) guests.text = '${prefill.guests}';
+      if (prefill.eventDate != null) eventDate = prefill.eventDate!;
+    }
     load();
   }
 
@@ -943,7 +1006,9 @@ class _QuoteEditorState extends State<QuoteEditor> {
           .toList();
       customerId =
           widget.existing?.str('customerId') ??
-          (customers.isEmpty ? null : customers.first.id);
+          (customers.any((c) => c.id == widget.prefill?.customerId)
+              ? widget.prefill!.customerId
+              : (customers.isEmpty ? null : customers.first.id));
       if (widget.existing != null) {
         final rev = await sales().revision(
           widget.existing!.id,
@@ -1100,21 +1165,9 @@ class _QuoteEditorState extends State<QuoteEditor> {
                   DropdownButtonFormField(
                     initialValue: eventType,
                     decoration: field('Event type'),
-                    items:
-                        [
-                              'Wedding',
-                              'Mehndi',
-                              'Baraat',
-                              'Walima',
-                              'Birthday',
-                              'Corporate',
-                              'Daig / bulk',
-                              'Other',
-                            ]
-                            .map(
-                              (v) => DropdownMenuItem(value: v, child: Text(v)),
-                            )
-                            .toList(),
+                    items: eventTypeOptions(eventType)
+                        .map((v) => DropdownMenuItem(value: v, child: Text(v)))
+                        .toList(),
                     onChanged: (v) => setState(() => eventType = v!),
                   ),
                   gap(),
@@ -1227,8 +1280,12 @@ class _QuoteEditorState extends State<QuoteEditor> {
         if (count == null || count < 1) {
           throw const FormatException('Invalid guest count');
         }
+        final inquiryId = customerId == widget.prefill?.customerId
+            ? widget.prefill?.inquiryId ?? ''
+            : '';
         await sales().createQuote(
           customerId: customerId!,
+          inquiryId: inquiryId,
           eventType: eventType,
           guests: count,
           eventDate: eventDate,
@@ -1237,6 +1294,12 @@ class _QuoteEditorState extends State<QuoteEditor> {
           discountPaisa: off,
           notes: notes.text,
         );
+        if (inquiryId.isNotEmpty) {
+          // Best effort: the quotation is saved even if this follow-up fails.
+          try {
+            await sales().markInquiryQuoted(inquiryId);
+          } catch (_) {}
+        }
       } else {
         await sales().reviseQuote(
           widget.existing!,

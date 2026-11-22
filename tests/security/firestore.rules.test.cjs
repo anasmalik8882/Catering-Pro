@@ -122,3 +122,22 @@ test('public storefront internals and intake remain inaccessible to anonymous cl
   const other = await provisionOwner('website-other');
   await assertFails(other.db.doc(`businesses/${alice.bizId}/publicInquiries/example`).get());
 });
+
+test('website inquiries are readable by sales roles only and never client-writable', async () => {
+  const alice = await provisionOwner('alice');
+  await env.withSecurityRulesDisabled(async ctx => {
+    const db = ctx.firestore();
+    await db.doc(`businesses/${alice.bizId}/publicInquiries/web1`).set({name:'Visitor', phone:'03001234567', status:'new'});
+    await db.doc(`businesses/${alice.bizId}/members/seller`).set({uid:'seller', role:'sales', active:true});
+    await db.doc(`businesses/${alice.bizId}/members/cook`).set({uid:'cook', role:'kitchen_staff', active:true});
+    await db.doc(`businesses/${alice.bizId}/members/former`).set({uid:'former', role:'sales', active:false});
+  });
+  const path = `businesses/${alice.bizId}/publicInquiries/web1`;
+  const as = uid => env.authenticatedContext(uid).firestore();
+  await assertSucceeds(as('seller').doc(path).get());
+  await assertFails(as('cook').doc(path).get());
+  await assertFails(as('former').doc(path).get());
+  await assertFails(env.unauthenticatedContext().firestore().doc(path).get());
+  await assertFails(as('seller').doc(path).update({status:'converted'}));
+  await assertFails(as('seller').doc(`businesses/${alice.bizId}/publicInquiries/new1`).set({name:'Forged', status:'new'}));
+});

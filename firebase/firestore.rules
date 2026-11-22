@@ -83,9 +83,11 @@ service cloud.firestore {
           && shortText(request.resource.data.email,160) && shortText(request.resource.data.notes,2000);
         allow delete: if false;
       }
-      // Anonymous intake is written only by the trusted callable.
+      // Anonymous intake is written only by the trusted callable; sales staff
+      // review/convert it through reviewPublicInquiry (Milestone 11).
       match /publicInquiries/{iid} {
-        allow read: if isOwner(businessId);
+        allow read: if isActiveMember(businessId)
+          && get(memberPath(businessId, request.auth.uid)).data.role in ['owner','manager','sales'];
         allow write: if false;
       }
       match /inquiries/{iid} {

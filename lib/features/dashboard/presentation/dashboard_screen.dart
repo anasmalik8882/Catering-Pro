@@ -5,6 +5,7 @@ import '../../business/domain/business.dart';
 import '../../sales/presentation/sales_screens.dart';
 import '../../operations/presentation/operations_screens.dart';
 import '../../storefront/storefront_management.dart';
+import '../../inquiries/website_inquiries.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -55,6 +56,32 @@ class DashboardScreen extends StatelessWidget {
                   ),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => Get.to(() => const StorefrontManagementPage()),
+                ),
+              ),
+            if (salesEditor())
+              Card(
+                child: StreamBuilder<int>(
+                  stream: watchNewWebsiteInquiryCount(),
+                  builder: (context, snapshot) {
+                    final count = snapshot.data ?? 0;
+                    return ListTile(
+                      leading: Badge(
+                        isLabelVisible: count > 0,
+                        label: Text('$count'),
+                        child: const Icon(Icons.language),
+                      ),
+                      title: const Text('Website inquiries'),
+                      subtitle: Text(
+                        snapshot.hasError
+                            ? 'Could not load inquiries'
+                            : count == 0
+                            ? 'No new requests'
+                            : '$count new request${count == 1 ? '' : 's'} to review',
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => Get.to(() => const WebsiteInquiriesPage()),
+                    );
+                  },
                 ),
               ),
             const SizedBox(height: 22),

@@ -82,6 +82,20 @@ class SalesRepository {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
+  /// Moves an open sales inquiry to `quoted` after a quotation is created.
+  Future<void> markInquiryQuoted(String id) async {
+    final ref = collection('inquiries').doc(id);
+    final snapshot = await ref.get();
+    if (!snapshot.exists ||
+        !['new', 'contacted'].contains(snapshot.data()?['status'])) {
+      return;
+    }
+    await ref.update({
+      'status': 'quoted',
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
   Future<void> createMenu({
     required String name,
     required String type,

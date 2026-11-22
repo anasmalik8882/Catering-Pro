@@ -14,6 +14,7 @@ function firestore() {
 }
 const region = 'asia-south1';
 Object.assign(exports, require('./storefront')(firestore));
+Object.assign(exports, require('./inquiries')(firestore));
 const roles = new Set(['owner', 'manager']);
 const transitions = {
   tentative: ['confirmed','cancelled'],
