@@ -38,7 +38,7 @@ service cloud.firestore {
       allow create: if signedIn() && validBusiness()
         && businessId == 'owner_' + request.auth.uid;
       allow read: if isActiveMember(businessId);
-      allow update: if isOwner(businessId)
+      allow update: if isOwner(businessId) && resource.data.status == 'active'
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name','city','phone'])
         && request.resource.data.name is string && request.resource.data.name.size() >= 3
         && request.resource.data.city is string && request.resource.data.city.size() > 0
@@ -59,8 +59,12 @@ service cloud.firestore {
         allow update, delete: if false;
       }
 
+      // Milestone 12: suspended tenants keep read access but cannot write.
+      function businessActive() {
+        return get(/databases/$(database)/documents/businesses/$(businessId)).data.status == 'active';
+      }
       function canEditSales() {
-        return isActiveMember(businessId)
+        return isActiveMember(businessId) && businessActive()
           && get(memberPath(businessId, request.auth.uid)).data.role in ['owner','manager','sales'];
       }
       function shortText(value, length) { return value is string && value.size() <= length; }
@@ -183,11 +187,11 @@ service cloud.firestore {
       }
       // Phases 3/4: records are tenant-scoped and financial ledgers are append-only.
       function canOperate() {
-        return isActiveMember(businessId)
+        return isActiveMember(businessId) && businessActive()
           && get(memberPath(businessId, request.auth.uid)).data.role in ['owner','manager','sales'];
       }
       function canManageFinance() {
-        return isActiveMember(businessId)
+        return isActiveMember(businessId) && businessActive()
           && get(memberPath(businessId, request.auth.uid)).data.role in ['owner','manager'];
       }
       match /bookings/{bookingId} {
@@ -260,6 +264,8 @@ service cloud.firestore {
       // Future modules remain denied until reviewed.
       match /{document=**} { allow read, write: if false; }
     }
+    // Platform audit trail: written and read only by admin callables.
+    match /platformAuditLogs/{logId} { allow read, write: if false; }
     match /{document=**} { allow read, write: if false; }
   }
 }

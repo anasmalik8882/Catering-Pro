@@ -1,6 +1,14 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../domain/business.dart';
 
+/// Thrown when the member's business was suspended by a platform admin.
+class BusinessSuspendedException implements Exception {
+  final String reason;
+  const BusinessSuspendedException(this.reason);
+  @override
+  String toString() => 'Business suspended: $reason';
+}
+
 abstract class BusinessRepository {
   Future<void> createBusiness({
     required String uid,
@@ -70,6 +78,9 @@ class FirestoreBusinessRepository implements BusinessRepository {
         .get(const GetOptions(source: Source.server));
     if (!businessDoc.exists) return null;
     final data = businessDoc.data()!;
+    if (data['status'] == 'suspended') {
+      throw BusinessSuspendedException('${data['statusReason'] ?? ''}');
+    }
     if (data['status'] != 'active') return null;
     return (
       business: Business(

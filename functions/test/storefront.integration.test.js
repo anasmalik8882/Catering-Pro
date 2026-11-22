@@ -178,3 +178,45 @@ test('website inquiries convert into a tenant customer and sales inquiry (Milest
   // No booking, quotation, payment or capacity state was touched.
   for (const c of ['bookings', 'quotations', 'payments', 'capacityDays']) assert.equal((await base.collection(c).get()).size, 0, c);
 });
+
+test('platform admin lists, inspects, suspends and reactivates tenants (Milestone 12)', {timeout:240000}, async () => {
+  assert.equal(process.env.GCLOUD_PROJECT, PROJECT);
+  if (!getApps().length) initializeApp({projectId:PROJECT});
+  const db = getFirestore();
+  const admin = await user('platform-admin@example.invalid');
+  await getAuth().setCustomUserClaims(admin.uid, {platformAdmin:true});
+  const refreshed = await fetch('http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=fake-key', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:'platform-admin@example.invalid',password:'emulator-password-123',returnSecureToken:true})});
+  const adminToken = (await refreshed.json()).idToken;
+  const owner = await user('tenant-owner@example.invalid');
+  const businessId = 'admin-tenant';
+  const base = db.collection('businesses').doc(businessId);
+  await base.set({name:'Admin Tenant', city:'Lahore', phone:'03001234567', status:'active', ownerId:owner.uid, privateNotes:'ledger'});
+  await base.collection('members').doc(owner.uid).set({role:'owner', active:true});
+  await base.collection('customers').doc('c1').set({name:'Customer'});
+
+  // Tenant owners are not platform admins.
+  for (const name of ['adminListBusinesses', 'adminGetBusiness', 'adminSetBusinessStatus', 'adminListAuditLog']) {
+    assert.equal((await invoke(name, {businessId, status:'suspended', reason:'test'}, owner.token)).error.status, 'PERMISSION_DENIED', name);
+    assert.equal((await invoke(name, {businessId}, null)).error.status, 'UNAUTHENTICATED', name);
+  }
+  const listed = await invoke('adminListBusinesses', {limit:50}, adminToken);
+  assert.ok(listed.result.businesses.some(b => b.id === businessId && b.ownerEmail === 'tenant-owner@example.invalid'), JSON.stringify(listed));
+  const detail = await invoke('adminGetBusiness', {businessId}, adminToken);
+  assert.equal(detail.result.usage.customers, 1);
+  assert.equal(detail.result.members[0].role, 'owner');
+  assert.ok(!JSON.stringify(detail.result).includes('ledger'));
+  assert.equal((await invoke('adminSetBusinessStatus', {businessId, status:'suspended', reason:''}, adminToken)).error.status, 'INVALID_ARGUMENT');
+  assert.equal((await invoke('adminSetBusinessStatus', {businessId, status:'suspended', reason:'Unpaid invoice'}, adminToken)).result.status, 'suspended');
+  assert.equal((await base.get()).get('status'), 'suspended');
+  // Suspension blocks trusted tenant operations.
+  const blocked = await invoke('initializeDailyCapacity', {businessId, maxGuestsPerDay:100}, owner.token);
+  assert.equal(blocked.error.status, 'FAILED_PRECONDITION');
+  assert.match(blocked.error.message, /suspended/);
+  const suspendedOnly = await invoke('adminListBusinesses', {status:'suspended'}, adminToken);
+  assert.ok(suspendedOnly.result.businesses.every(b => b.status === 'suspended'));
+  assert.equal((await invoke('adminSetBusinessStatus', {businessId, status:'active'}, adminToken)).result.status, 'active');
+  assert.ok((await invoke('initializeDailyCapacity', {businessId, maxGuestsPerDay:100}, owner.token)).result);
+  const log = await invoke('adminListAuditLog', {businessId}, adminToken);
+  assert.deepEqual(log.result.entries.map(e => e.action), ['business.reactivate', 'business.suspend']);
+  assert.equal(log.result.entries[1].reason, 'Unpaid invoice');
+});

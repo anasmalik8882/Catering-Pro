@@ -31,6 +31,12 @@ class SessionGate extends StatelessWidget {
         return const OnboardingScreen();
       case SessionStage.ready:
         return const DashboardScreen();
+      case SessionStage.suspended:
+        return SuspendedScreen(
+          message: session.errorMessage.value,
+          onRetry: session.reloadSession,
+          onSignOut: () => session.auth.signOut(),
+        );
       case SessionStage.error:
         return Scaffold(
           body: Center(
@@ -56,4 +62,44 @@ class SessionGate extends StatelessWidget {
         );
     }
   });
+}
+
+class SuspendedScreen extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+  final VoidCallback onSignOut;
+  const SuspendedScreen({
+    super.key,
+    required this.message,
+    required this.onRetry,
+    required this.onSignOut,
+  });
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    body: Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.pause_circle_outline,
+              size: 56,
+              color: Theme.of(context).colorScheme.error,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Account suspended',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: 8),
+            Text(message, textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            FilledButton(onPressed: onRetry, child: const Text('Check again')),
+            TextButton(onPressed: onSignOut, child: const Text('Sign out')),
+          ],
+        ),
+      ),
+    ),
+  );
 }

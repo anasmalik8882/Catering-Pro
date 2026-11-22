@@ -15,6 +15,7 @@ function firestore() {
 const region = 'asia-south1';
 Object.assign(exports, require('./storefront')(firestore));
 Object.assign(exports, require('./inquiries')(firestore));
+Object.assign(exports, require('./admin')(firestore));
 const roles = new Set(['owner', 'manager']);
 const transitions = {
   tentative: ['confirmed','cancelled'],
@@ -31,9 +32,13 @@ async function authorize(req, businessId) {
   if (!req.auth) fail('unauthenticated','Sign in first.');
   if (!string(businessId,180)) fail('invalid-argument','Invalid business.');
   const base = firestore().collection('businesses').doc(businessId);
-  const member = await base.collection('members').doc(req.auth.uid).get();
+  const [business, member] = await Promise.all([base.get(), base.collection('members').doc(req.auth.uid).get()]);
   if (!member.exists || member.get('active') !== true || !roles.has(member.get('role'))) {
     fail('permission-denied','Owner or manager permission required.');
+  }
+  // Milestone 12: a platform admin can suspend a tenant; block trusted writes.
+  if (!business.exists || business.get('status') !== 'active') {
+    fail('failed-precondition','This business account is suspended. Contact Caterer Pro support.');
   }
   return base;
 }

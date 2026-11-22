@@ -5,7 +5,7 @@ import '../../features/auth/domain/auth_repository.dart';
 import '../../features/business/data/business_repository.dart';
 import '../../features/business/domain/business.dart';
 
-enum SessionStage { loading, signedOut, onboarding, ready, error }
+enum SessionStage { loading, signedOut, onboarding, ready, suspended, error }
 
 class SessionController extends GetxController {
   final AuthRepository auth;
@@ -47,6 +47,12 @@ class SessionController extends GetxController {
       business.value = result.business;
       membership.value = result.member;
       stage.value = SessionStage.ready;
+    } on BusinessSuspendedException catch (e) {
+      if (version != _generation) return;
+      errorMessage.value = e.reason.trim().isEmpty
+          ? 'Your business account has been suspended. Contact Caterer Pro support.'
+          : 'Your business account has been suspended: ${e.reason.trim()}\nContact Caterer Pro support.';
+      stage.value = SessionStage.suspended;
     } catch (_) {
       if (version != _generation) return;
       errorMessage.value =

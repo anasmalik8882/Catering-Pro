@@ -74,6 +74,7 @@ module.exports = function register(db) {
       if (!business.exists || !member.exists || member.get('active') !== true || !salesRoles.has(member.get('role'))) {
         throw new HttpsError('permission-denied', 'Owner, manager or sales access required.');
       }
+      if (business.get('status') !== 'active') throw new HttpsError('failed-precondition', 'This business account is suspended.');
       if (!inquiry.exists) throw new HttpsError('not-found', 'Website inquiry not found.');
       const current = inquiry.get('status');
       const rule = actions[input.action];

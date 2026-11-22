@@ -141,3 +141,18 @@ test('website inquiries are readable by sales roles only and never client-writab
   await assertFails(as('seller').doc(path).update({status:'converted'}));
   await assertFails(as('seller').doc(`businesses/${alice.bizId}/publicInquiries/new1`).set({name:'Forged', status:'new'}));
 });
+
+test('suspended tenants keep read access but cannot write; audit log is closed', async () => {
+  const alice = await provisionOwner('alice');
+  await assertSucceeds(alice.db.doc(`businesses/${alice.bizId}/customers/c1`).set({name:'Before', phone:'03001234567', email:'', notes:'', createdBy:'alice', createdAt:serverTimestamp(), updatedAt:serverTimestamp()}));
+  await env.withSecurityRulesDisabled(async ctx => {
+    await ctx.firestore().doc(`businesses/${alice.bizId}`).update({status:'suspended', statusReason:'Unpaid'});
+    await ctx.firestore().doc('platformAuditLogs/x').set({action:'business.suspend'});
+  });
+  await assertSucceeds(alice.db.doc(`businesses/${alice.bizId}/customers/c1`).get());
+  await assertFails(alice.db.doc(`businesses/${alice.bizId}/customers/c2`).set({name:'After', phone:'03001234567', email:'', notes:'', createdBy:'alice', createdAt:serverTimestamp(), updatedAt:serverTimestamp()}));
+  await assertFails(alice.db.doc(`businesses/${alice.bizId}`).update({name:'Renamed'}));
+  await assertFails(alice.db.doc(`businesses/${alice.bizId}`).update({status:'active'}));
+  await assertFails(alice.db.doc('platformAuditLogs/x').get());
+  await assertFails(env.authenticatedContext('admin', {platformAdmin:true}).firestore().doc('platformAuditLogs/x').get());
+});
